@@ -8,15 +8,21 @@ async function convertImage({ srcUrl, format }) {
   if (!['jpeg', 'png'].includes(format)) throw new Error('Output format must be jpeg or png');
   const blob = await loadImageBlob(srcUrl);
   const bitmap = await createImageBitmap(blob);
+  // Always export at the decoded source image's native pixel dimensions.
+  // No resize/downscale is applied, so output keeps the maximum resolution Chrome can decode from srcUrl.
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { alpha: format !== 'jpeg' });
+  ctx.imageSmoothingEnabled = false;
   if (format === 'jpeg') {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height); // JPEG has no alpha; avoid black transparent background.
   }
-  ctx.drawImage(bitmap, 0, 0);
+  ctx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height);
   bitmap.close?.();
-  const outBlob = await canvas.convertToBlob({ type: `image/${format}`, quality: format === 'jpeg' ? 0.92 : undefined });
+  const outBlob = await canvas.convertToBlob({
+    type: `image/${format}`,
+    quality: format === 'jpeg' ? 1.0 : undefined // Highest JPEG quality Chrome exposes. PNG is lossless.
+  });
   return { ok: true, dataUrl: await blobToDataUrl(outBlob), width: canvas.width, height: canvas.height };
 }
 
