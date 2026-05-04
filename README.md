@@ -7,7 +7,7 @@ Chrome Extension MV3 giúp lưu ảnh trên web về `.jpg` hoặc `.png`, kể 
 - Chuột phải vào ảnh bất kỳ trên web.
 - Chọn **Save image as JPG** hoặc **Save image as PNG**.
 - Extension convert ảnh bằng offscreen canvas rồi tải về đúng định dạng đầu ra.
-- Ghi nhớ thư mục con trong Downloads mà Sếp đã chọn ở lần lưu gần nhất, rồi tự gợi ý lại cho lần lưu tiếp theo.
+- Cố gắng lưu lần tiếp theo theo thư mục đã dùng ở lần lưu trước: lần đầu vẫn hỏi Save As, các lần sau nếu nhớ được thư mục con trong Downloads thì lưu thẳng vào thư mục đó.
 - JPG được nền trắng để tránh lỗi nền trong suốt.
 
 ## Cài đặt local

@@ -17,6 +17,7 @@ for (const size of ['16','32','48','128']) {
 const bg = fs.readFileSync(path.join(root, 'background.js'), 'utf8');
 if (!bg.includes('Save image as JPG') || !bg.includes('Save image as PNG')) throw new Error('Context menu labels missing');
 if (!bg.includes('LAST_DOWNLOAD_DIR_KEY') || !bg.includes('chrome.storage.local') || !bg.includes('chrome.downloads.onChanged')) throw new Error('Last download folder memory logic missing');
+if (!bg.includes('saveAs: !rememberedTarget.hasRememberedDir')) throw new Error('Remembered folder should auto-save without Save As dialog');
 const off = fs.readFileSync(path.join(root, 'offscreen.js'), 'utf8');
 if (!off.includes("['jpeg', 'png']") || !off.includes('createImageBitmap') || !off.includes('convertToBlob')) throw new Error('Converter logic incomplete');
 console.log('Validation OK');

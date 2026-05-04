@@ -2,7 +2,6 @@ const MENU_JPG = 'save-image-as-jpg';
 const MENU_PNG = 'save-image-as-png';
 const OFFSCREEN_URL = 'offscreen.html';
 const LAST_DOWNLOAD_DIR_KEY = 'lastDownloadDir';
-const DOWNLOADS_DIR_RE = /(?:^|[\\/])Downloads[\\/](.*)[\\/][^\\/]+$/i;
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
@@ -24,10 +23,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       format
     });
     if (!result?.ok) throw new Error(result?.error || 'Unknown conversion error');
+    const rememberedTarget = await buildRememberedDownloadTarget(info.srcUrl, format);
     const downloadId = await chrome.downloads.download({
       url: result.dataUrl,
-      filename: await buildRememberedFilename(info.srcUrl, format),
-      saveAs: true
+      filename: rememberedTarget.filename,
+      saveAs: !rememberedTarget.hasRememberedDir
     });
     rememberDownloadDirectory(downloadId);
   } catch (error) {
@@ -54,10 +54,14 @@ async function hasOffscreenDocument() {
   return contexts.length > 0;
 }
 
-async function buildRememberedFilename(srcUrl, format) {
+async function buildRememberedDownloadTarget(srcUrl, format) {
   const filename = buildFilename(srcUrl, format);
   const { [LAST_DOWNLOAD_DIR_KEY]: lastDir = '' } = await chrome.storage.local.get(LAST_DOWNLOAD_DIR_KEY);
-  return lastDir ? `${lastDir}/${filename}` : filename;
+  const safeLastDir = sanitizeRelativePath(lastDir);
+  return {
+    filename: safeLastDir ? `${safeLastDir}/${filename}` : filename,
+    hasRememberedDir: Boolean(safeLastDir)
+  };
 }
 
 function buildFilename(srcUrl, format) {
@@ -76,27 +80,62 @@ function rememberDownloadDirectory(downloadId) {
   if (!downloadId) return;
 
   const handleChange = async (delta) => {
-    if (delta.id !== downloadId || delta.state?.current !== 'complete') return;
-    chrome.downloads.onChanged.removeListener(handleChange);
+    if (delta.id === downloadId && delta.filename?.current) {
+      const [item] = await chrome.downloads.search({ id: downloadId });
+      const finalPath = item?.filename || delta.filename?.current || '';
+      const relativeDir = deriveRelativeDirFromFinalPath(finalPath, item?.filename || '');
+      if (relativeDir) {
+        await chrome.storage.local.set({ [LAST_DOWNLOAD_DIR_KEY]: relativeDir });
+      }
+    }
 
-    const [item] = await chrome.downloads.search({ id: downloadId });
-    const relativeDir = extractDownloadsRelativeDir(item?.filename || '');
-    if (relativeDir) {
-      await chrome.storage.local.set({ [LAST_DOWNLOAD_DIR_KEY]: relativeDir });
+    if (delta.id === downloadId && ['complete', 'interrupted'].includes(delta.state?.current)) {
+      chrome.downloads.onChanged.removeListener(handleChange);
     }
   };
 
   chrome.downloads.onChanged.addListener(handleChange);
 }
 
-function extractDownloadsRelativeDir(nativePath) {
-  const normalized = nativePath.replace(/\\/g, '/');
-  const match = normalized.match(DOWNLOADS_DIR_RE);
-  if (!match) return '';
-  return match[1]
+function deriveRelativeDirFromFinalPath(finalPath, fallbackPath = '') {
+  const normalized = normalizePath(finalPath || fallbackPath);
+  if (!normalized) return '';
+
+  const fileName = normalized.split('/').filter(Boolean).pop() || '';
+  const folderPath = normalized.slice(0, normalized.length - fileName.length).replace(/\/$/, '');
+  if (!folderPath) return '';
+
+  // Chrome's downloads API accepts paths relative to its default download directory.
+  // If the final path is inside the current default download directory, the part
+  // after that directory is exactly what we can reuse for the next download.
+  // With saveAs enabled, Chrome may also remember the OS dialog's last folder;
+  // in that case an empty relativeDir is still okay because Chrome itself opens
+  // the previous folder. We only persist a non-empty relative subfolder.
+  const downloadsIndex = findDownloadsSegmentIndex(folderPath);
+  if (downloadsIndex === -1) return '';
+
+  const parts = folderPath.split('/').filter(Boolean).slice(downloadsIndex + 1);
+  return sanitizeRelativePath(parts.join('/'));
+}
+
+function normalizePath(path) {
+  return String(path || '').replace(/\\/g, '/');
+}
+
+function findDownloadsSegmentIndex(path) {
+  const parts = path.split('/').filter(Boolean);
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    if (/^downloads$/i.test(parts[index])) return index;
+  }
+  return -1;
+}
+
+function sanitizeRelativePath(path) {
+  return String(path || '')
     .split('/')
     .filter(Boolean)
-    .map((part) => part.replace(/[\\:*?"<>|]+/g, '_'))
+    .map((part) => part.replace(/[\\/:*?"<>|]+/g, '_'))
+    .filter(Boolean)
     .join('/');
 }
 
