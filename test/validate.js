@@ -7,7 +7,7 @@ for (const file of ['manifest.json','background.js','offscreen.html','offscreen.
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
 if (manifest.manifest_version !== 3) throw new Error('manifest_version must be 3');
 if (manifest.name !== 'Chrome Image Downloader by TechNow') throw new Error('Extension name mismatch');
-for (const perm of ['contextMenus','downloads','offscreen','storage']) {
+for (const perm of ['contextMenus','downloads','offscreen']) {
   if (!manifest.permissions.includes(perm)) throw new Error(`Missing permission ${perm}`);
 }
 for (const size of ['16','32','48','128']) {
@@ -16,8 +16,8 @@ for (const size of ['16','32','48','128']) {
 }
 const bg = fs.readFileSync(path.join(root, 'background.js'), 'utf8');
 if (!bg.includes('Save image as JPG') || !bg.includes('Save image as PNG')) throw new Error('Context menu labels missing');
-if (!bg.includes('LAST_DOWNLOAD_DIR_KEY') || !bg.includes('chrome.storage.local') || !bg.includes('chrome.downloads.onChanged')) throw new Error('Last download folder memory logic missing');
-if (!bg.includes('saveAs: !rememberedTarget.hasRememberedDir')) throw new Error('Remembered folder should auto-save without Save As dialog');
+if (!bg.includes('saveAs: true')) throw new Error('Fast original Save As download flow missing');
+if (bg.includes('chrome.storage.local') || bg.includes('chrome.downloads.onChanged')) throw new Error('Slow folder-memory logic should not be enabled in fast build');
 const off = fs.readFileSync(path.join(root, 'offscreen.js'), 'utf8');
 if (!off.includes("['jpeg', 'png']") || !off.includes('createImageBitmap') || !off.includes('convertToBlob')) throw new Error('Converter logic incomplete');
 console.log('Validation OK');

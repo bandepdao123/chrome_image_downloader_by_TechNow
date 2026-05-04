@@ -1,13 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Chrome Image Downloader by TechNow",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Save web images at maximum decoded source resolution from WebP/AVIF/JPEG/PNG/GIF and other browser-decodable formats as JPG or PNG.",
   "permissions": [
     "contextMenus",
     "downloads",
     "offscreen",
-    "storage",
     "activeTab",
     "scripting"
   ],
