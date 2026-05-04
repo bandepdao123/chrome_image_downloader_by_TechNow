@@ -1,6 +1,8 @@
 const MENU_JPG = 'save-image-as-jpg';
 const MENU_PNG = 'save-image-as-png';
 const OFFSCREEN_URL = 'offscreen.html';
+const LAST_DOWNLOAD_DIR_KEY = 'lastDownloadDir';
+const DOWNLOADS_DIR_RE = /(?:^|[\\/])Downloads[\\/](.*)[\\/][^\\/]+$/i;
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
@@ -22,11 +24,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       format
     });
     if (!result?.ok) throw new Error(result?.error || 'Unknown conversion error');
-    await chrome.downloads.download({
+    const downloadId = await chrome.downloads.download({
       url: result.dataUrl,
-      filename: buildFilename(info.srcUrl, format),
+      filename: await buildRememberedFilename(info.srcUrl, format),
       saveAs: true
     });
+    rememberDownloadDirectory(downloadId);
   } catch (error) {
     console.error('Save Image as JPG/PNG failed:', error);
     notifyFailure(error);
@@ -51,6 +54,12 @@ async function hasOffscreenDocument() {
   return contexts.length > 0;
 }
 
+async function buildRememberedFilename(srcUrl, format) {
+  const filename = buildFilename(srcUrl, format);
+  const { [LAST_DOWNLOAD_DIR_KEY]: lastDir = '' } = await chrome.storage.local.get(LAST_DOWNLOAD_DIR_KEY);
+  return lastDir ? `${lastDir}/${filename}` : filename;
+}
+
 function buildFilename(srcUrl, format) {
   const ext = format === 'jpeg' ? 'jpg' : 'png';
   let name = 'image';
@@ -61,6 +70,34 @@ function buildFilename(srcUrl, format) {
   } catch (_) {}
   name = name.replace(/[\/:*?"<>|]+/g, '_').slice(0, 120) || 'image';
   return `${name}.${ext}`;
+}
+
+function rememberDownloadDirectory(downloadId) {
+  if (!downloadId) return;
+
+  const handleChange = async (delta) => {
+    if (delta.id !== downloadId || delta.state?.current !== 'complete') return;
+    chrome.downloads.onChanged.removeListener(handleChange);
+
+    const [item] = await chrome.downloads.search({ id: downloadId });
+    const relativeDir = extractDownloadsRelativeDir(item?.filename || '');
+    if (relativeDir) {
+      await chrome.storage.local.set({ [LAST_DOWNLOAD_DIR_KEY]: relativeDir });
+    }
+  };
+
+  chrome.downloads.onChanged.addListener(handleChange);
+}
+
+function extractDownloadsRelativeDir(nativePath) {
+  const normalized = nativePath.replace(/\\/g, '/');
+  const match = normalized.match(DOWNLOADS_DIR_RE);
+  if (!match) return '';
+  return match[1]
+    .split('/')
+    .filter(Boolean)
+    .map((part) => part.replace(/[\\:*?"<>|]+/g, '_'))
+    .join('/');
 }
 
 function notifyFailure(error) {

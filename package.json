@@ -1,6 +1,6 @@
 {
   "name": "chrome_image_downloader_by_TechNow",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "scripts": {
     "test": "node test/validate.js"
